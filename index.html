@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AWS SAA-C03 Practice Test</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Danh sách câu hỏi">
+        <div class="brand">
+          <div class="brand-mark">AWS</div>
+          <div>
+            <h1>SAA-C03 Practice</h1>
+            <p id="questionCount">Đang tải câu hỏi...</p>
+          </div>
+        </div>
+
+        <div class="progress-card">
+          <div class="score-row">
+            <span>Tiến độ</span>
+            <strong id="progressText">0/0</strong>
+          </div>
+          <div class="progress-track" aria-hidden="true">
+            <div id="progressFill"></div>
+          </div>
+          <div class="mini-stats">
+            <span><b id="correctCount">0</b> đúng</span>
+            <span><b id="wrongCount">0</b> sai</span>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>Tìm câu hỏi</span>
+          <input id="searchInput" type="search" placeholder="Nhập số câu hoặc từ khóa" />
+        </label>
+
+        <div class="filter-tabs" role="tablist" aria-label="Bộ lọc câu hỏi">
+          <button class="active" data-filter="all" type="button">Tất cả</button>
+          <button data-filter="unanswered" type="button">Chưa làm</button>
+          <button data-filter="wrong" type="button">Sai</button>
+          <button data-filter="correct" type="button">Đúng</button>
+        </div>
+
+        <div id="questionGrid" class="question-grid" aria-label="Chọn câu hỏi"></div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">AWS Certified Solutions Architect Associate</p>
+            <h2 id="questionTitle">Question</h2>
+          </div>
+          <div class="top-actions">
+            <button id="resetBtn" class="ghost-btn" type="button">Làm lại</button>
+          </div>
+        </header>
+
+        <section class="quiz-panel" aria-live="polite">
+          <div class="question-meta">
+            <span id="modePill">Một đáp án</span>
+            <span id="votePill">Answer votes</span>
+          </div>
+
+          <p id="questionText" class="question-text"></p>
+          <div id="answers" class="answers"></div>
+
+          <div id="resultBox" class="result-box" hidden></div>
+
+          <div class="controls">
+            <button id="prevBtn" class="secondary-btn" type="button">Trước</button>
+            <button id="checkBtn" class="primary-btn" type="button" hidden>Chấm đáp án</button>
+            <button id="nextBtn" class="primary-btn" type="button">Tiếp</button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="questions.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
