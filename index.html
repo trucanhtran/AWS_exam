@@ -4,6 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AWS SAA-C03 Practice Test</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap"
+    />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -64,8 +70,16 @@
             <div id="examSideStats" class="mini-stats"></div>
           </div>
 
+          <div id="reviewTabs" class="review-tabs" role="tablist" aria-label="Lọc câu khi xem lại" hidden>
+            <button data-review-filter="all" type="button">Tất cả</button>
+            <button data-review-filter="wrong" type="button">Sai</button>
+            <button data-review-filter="skipped" type="button">Bỏ trống</button>
+            <button data-review-filter="correct" type="button">Đúng</button>
+          </div>
+
           <div id="examLegend" class="grid-legend"></div>
           <div id="examGrid" class="question-grid" aria-label="Chọn câu trong đề"></div>
+          <p id="examGridEmpty" class="grid-empty" hidden>Không có câu nào trong mục này.</p>
         </div>
       </aside>
 
@@ -101,17 +115,21 @@
         </div>
 
         <div data-view="exam" hidden>
-          <header class="topbar">
-            <div>
-              <p id="examEyebrow" class="eyebrow">Thi thử ngẫu nhiên</p>
-              <h2 id="examTitle">Đề thi thử</h2>
-            </div>
-            <div class="top-actions">
-              <span id="examTimer" class="timer-pill" role="timer" hidden></span>
-              <button id="submitExamBtn" class="primary-btn" type="button" hidden>Nộp bài</button>
-              <button id="newExamBtn" class="primary-btn" type="button" hidden>Làm đề mới</button>
-            </div>
-          </header>
+          <div class="sticky-bar">
+            <header class="topbar">
+              <div>
+                <p id="examEyebrow" class="eyebrow">Thi thử ngẫu nhiên</p>
+                <h2 id="examTitle">Đề thi thử</h2>
+              </div>
+              <div class="top-actions">
+                <span id="examTimer" class="timer-pill" role="timer" hidden></span>
+                <button id="pauseBtn" class="ghost-btn" type="button" hidden>Tạm dừng</button>
+                <button id="submitExamBtn" class="primary-btn" type="button" hidden>Nộp bài</button>
+                <button id="backBtn" class="ghost-btn" type="button" hidden>Quay lại</button>
+                <button id="newExamBtn" class="primary-btn" type="button" hidden>Làm đề mới</button>
+              </div>
+            </header>
+          </div>
 
           <section id="examStart" class="quiz-panel start-panel">
             <div class="exam-facts">
@@ -120,7 +138,10 @@
               <div><b id="examPassFact">72%</b><span>để đạt</span></div>
             </div>
             <p id="examRuleText" class="start-note"></p>
-            <p class="start-note">Trong lúc làm bài sẽ không hiện đáp án. Có thể đánh dấu câu để xem lại. Hết giờ hệ thống tự nộp bài.</p>
+            <p class="start-note">
+              Trong lúc làm bài sẽ không hiện đáp án. Có thể đánh dấu câu để xem lại và tạm dừng khi cần. Hết giờ hệ
+              thống tự nộp bài. Mọi đề đã thi đều xem lại được đáp án trong phần lịch sử.
+            </p>
             <div class="controls">
               <button id="startExamBtn" class="primary-btn" type="button">Bắt đầu làm bài</button>
             </div>
@@ -135,6 +156,7 @@
                       <th>Điểm</th>
                       <th>Thời gian</th>
                       <th>Kết quả</th>
+                      <th><span class="sr-only">Xem lại</span></th>
                     </tr>
                   </thead>
                   <tbody id="historyBody"></tbody>
@@ -144,17 +166,29 @@
           </section>
 
           <section id="examSummary" class="summary-card" hidden>
-            <div class="summary-score">
+            <div id="scoreRing" class="score-ring">
               <b id="summaryPercent">0%</b>
-              <span id="summaryVerdict" class="verdict"></span>
             </div>
-            <div class="summary-stats">
-              <span>Đúng <b id="summaryCorrect">0</b></span>
-              <span>Sai <b id="summaryWrong">0</b></span>
-              <span>Bỏ trống <b id="summaryUnanswered">0</b></span>
-              <span>Thời gian <b id="summaryTime">0:00</b></span>
+            <div class="summary-body">
+              <div class="summary-head">
+                <span id="summaryVerdict" class="verdict"></span>
+                <span id="summaryDate" class="summary-date"></span>
+              </div>
+              <div class="summary-stats">
+                <span class="stat good"><b id="summaryCorrect">0</b> đúng</span>
+                <span class="stat bad"><b id="summaryWrong">0</b> sai</span>
+                <span class="stat"><b id="summaryUnanswered">0</b> bỏ trống</span>
+                <span class="stat"><b id="summaryTime">0:00</b> làm bài</span>
+              </div>
+              <p id="summaryNote" class="summary-note"></p>
             </div>
-            <p id="summaryNote" class="summary-note"></p>
+          </section>
+
+          <section id="examPaused" class="quiz-panel paused-panel" hidden>
+            <div class="paused-icon" aria-hidden="true"><i></i><i></i></div>
+            <h3>Bài thi đang tạm dừng</h3>
+            <p>Đồng hồ đã dừng và câu hỏi được ẩn đi. Thời gian còn lại: <b id="pausedRemaining">0:00</b></p>
+            <button id="resumeBtn" class="primary-btn" type="button">Tiếp tục làm bài</button>
           </section>
 
           <section id="examQuestionPanel" class="quiz-panel" aria-live="polite" hidden>

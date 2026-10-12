@@ -12,6 +12,7 @@
     deck: "saa-c03-exam-deck",
     history: "saa-c03-exam-history",
   };
+  const reviewLabels = { all: "Tất cả", wrong: "Sai", skipped: "Bỏ trống", correct: "Đúng" };
 
   const els = {
     views: document.querySelectorAll("[data-view]"),
@@ -21,12 +22,18 @@
     sideValue: document.getElementById("examSideValue"),
     progressFill: document.getElementById("examProgressFill"),
     sideStats: document.getElementById("examSideStats"),
+    reviewTabs: document.getElementById("reviewTabs"),
+    reviewButtons: document.querySelectorAll("#reviewTabs button"),
     legend: document.getElementById("examLegend"),
     grid: document.getElementById("examGrid"),
+    gridEmpty: document.getElementById("examGridEmpty"),
+    stickyBar: document.querySelector("[data-view='exam'] .sticky-bar"),
     eyebrow: document.getElementById("examEyebrow"),
     title: document.getElementById("examTitle"),
     timer: document.getElementById("examTimer"),
+    pauseBtn: document.getElementById("pauseBtn"),
     submitBtn: document.getElementById("submitExamBtn"),
+    backBtn: document.getElementById("backBtn"),
     newExamBtn: document.getElementById("newExamBtn"),
     start: document.getElementById("examStart"),
     sizeFact: document.getElementById("examSizeFact"),
@@ -37,13 +44,18 @@
     historyBlock: document.getElementById("historyBlock"),
     historyBody: document.getElementById("historyBody"),
     summary: document.getElementById("examSummary"),
+    scoreRing: document.getElementById("scoreRing"),
     summaryPercent: document.getElementById("summaryPercent"),
     summaryVerdict: document.getElementById("summaryVerdict"),
+    summaryDate: document.getElementById("summaryDate"),
     summaryCorrect: document.getElementById("summaryCorrect"),
     summaryWrong: document.getElementById("summaryWrong"),
     summaryUnanswered: document.getElementById("summaryUnanswered"),
     summaryTime: document.getElementById("summaryTime"),
     summaryNote: document.getElementById("summaryNote"),
+    paused: document.getElementById("examPaused"),
+    pausedRemaining: document.getElementById("pausedRemaining"),
+    resumeBtn: document.getElementById("resumeBtn"),
     questionPanel: document.getElementById("examQuestionPanel"),
     modePill: document.getElementById("examModePill"),
     numberPill: document.getElementById("examNumberPill"),
@@ -56,11 +68,19 @@
   };
 
   const percentFormat = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 });
+  const dateFormat = new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   let mode = readStorage(keys.mode) === "exam" ? "exam" : "practice";
   let deck = ExamDeck.sync(readStorage(keys.deck), questions.length);
   let history = loadHistory();
   let exam = loadExam();
+  let reviewFilter = "all";
   let timerId = null;
 
   function readStorage(key) {
@@ -81,6 +101,14 @@
     }
   }
 
+  function validQuestionIds(ids) {
+    return (
+      Array.isArray(ids) &&
+      ids.length > 0 &&
+      ids.every((id) => Number.isInteger(id) && id >= 0 && id < questions.length)
+    );
+  }
+
   function loadHistory() {
     const saved = readStorage(keys.history);
     return Array.isArray(saved) ? saved.filter((item) => item && item.total > 0) : [];
@@ -92,11 +120,9 @@
       saved &&
       saved.version === 1 &&
       (saved.status === "active" || saved.status === "finished") &&
-      Array.isArray(saved.questionIds) &&
-      saved.questionIds.length > 0 &&
-      saved.questionIds.every((id) => Number.isInteger(id) && id >= 0 && id < questions.length);
+      validQuestionIds(saved.questionIds);
     if (!valid) return null;
-    return { answers: {}, flagged: [], current: 0, ...saved };
+    return { answers: {}, flagged: [], current: 0, pausedAt: null, pausedMs: 0, ...saved };
   }
 
   function saveExam() {
@@ -123,13 +149,25 @@
     return normalizeLetters(pickedAt(position)) === normalizeLetters(examQuestion(position).correct);
   }
 
+  function reviewStatus(position) {
+    if (isRight(position)) return "correct";
+    return pickedAt(position).length ? "wrong" : "skipped";
+  }
+
+  function examStatus() {
+    if (!exam) return "idle";
+    if (exam.status === "finished") return "finished";
+    return exam.pausedAt ? "paused" : "active";
+  }
+
   function scoreExam() {
     const total = exam.questionIds.length;
     let correct = 0;
     let unanswered = 0;
     exam.questionIds.forEach((_, position) => {
-      if (isRight(position)) correct += 1;
-      else if (!pickedAt(position).length) unanswered += 1;
+      const status = reviewStatus(position);
+      if (status === "correct") correct += 1;
+      else if (status === "skipped") unanswered += 1;
     });
     return { total, correct, unanswered, wrong: total - correct - unanswered, percent: (correct / total) * 100 };
   }
@@ -147,11 +185,13 @@
   }
 
   function remainingSeconds() {
-    return Math.max(0, Math.ceil((exam.endsAt - Date.now()) / 1000));
+    const now = exam.pausedAt || Date.now();
+    return Math.max(0, Math.ceil((exam.endsAt - now) / 1000));
   }
 
+  // Time actually spent answering, without pauses.
   function usedSeconds(item) {
-    return Math.round((item.finishedAt - item.startedAt) / 1000);
+    return Math.max(0, Math.round((item.finishedAt - item.startedAt - (item.pausedMs || 0)) / 1000));
   }
 
   function setStats(items) {
@@ -193,27 +233,57 @@
       startedAt: now,
       endsAt: now + EXAM_MINUTES * 60 * 1000,
       finishedAt: null,
+      pausedAt: null,
+      pausedMs: 0,
       timedOut: false,
     };
+    saveExam();
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  // Moves the deadline forward by the paused time and clears the pause.
+  function applyResume() {
+    const pausedFor = Date.now() - exam.pausedAt;
+    exam.endsAt += pausedFor;
+    exam.pausedMs = (exam.pausedMs || 0) + pausedFor;
+    exam.pausedAt = null;
+  }
+
+  function pauseExam() {
+    if (examStatus() !== "active" || !ensureTimeLeft()) return;
+    exam.pausedAt = Date.now();
+    saveExam();
+    render();
+  }
+
+  function resumeExam() {
+    if (examStatus() !== "paused") return;
+    applyResume();
     saveExam();
     render();
   }
 
   function finishExam(timedOut) {
     if (!exam || exam.status !== "active") return;
+    if (exam.pausedAt) applyResume();
     exam.status = "finished";
     exam.timedOut = timedOut;
     exam.finishedAt = Math.min(Date.now(), exam.endsAt);
     exam.current = 0;
+    reviewFilter = "all";
 
     const score = scoreExam();
     history = [
       {
         startedAt: exam.startedAt,
         finishedAt: exam.finishedAt,
+        pausedMs: exam.pausedMs,
+        timedOut,
         correct: score.correct,
         total: score.total,
-        timedOut,
+        questionIds: exam.questionIds,
+        answers: exam.answers,
       },
       ...history,
     ].slice(0, HISTORY_LIMIT);
@@ -222,9 +292,30 @@
     render();
   }
 
+  function openHistory(item) {
+    exam = {
+      version: 1,
+      status: "finished",
+      questionIds: item.questionIds,
+      answers: item.answers || {},
+      flagged: [],
+      current: 0,
+      startedAt: item.startedAt,
+      endsAt: item.finishedAt,
+      finishedAt: item.finishedAt,
+      pausedAt: null,
+      pausedMs: item.pausedMs || 0,
+      timedOut: Boolean(item.timedOut),
+    };
+    reviewFilter = "all";
+    saveExam();
+    render();
+    window.scrollTo(0, 0);
+  }
+
   // Returns false (and submits) when time ran out while the page was idle.
   function ensureTimeLeft() {
-    if (exam.status === "active" && remainingSeconds() <= 0) {
+    if (examStatus() === "active" && remainingSeconds() <= 0) {
       finishExam(true);
       return false;
     }
@@ -243,14 +334,45 @@
     if (window.confirm(message)) finishExam(false);
   }
 
+  function visiblePositions() {
+    const all = exam.questionIds.map((_, position) => position);
+    if (exam.status !== "finished" || reviewFilter === "all") return all;
+    return all.filter((position) => reviewStatus(position) === reviewFilter);
+  }
+
+  function neighbour(direction) {
+    const visible = visiblePositions();
+    return direction > 0
+      ? visible.find((position) => position > exam.current)
+      : visible.filter((position) => position < exam.current).pop();
+  }
+
+  // Keeps the question in view on small screens, where the grid sits above it.
+  function revealQuestion() {
+    const top = els.questionPanel.getBoundingClientRect().top;
+    const barHeight = els.stickyBar ? els.stickyBar.offsetHeight : 0;
+    if (top < barHeight || top > window.innerHeight * 0.6) {
+      els.questionPanel.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+  }
+
   function goTo(position) {
+    if (examStatus() === "paused") return;
     exam.current = Math.max(0, Math.min(exam.questionIds.length - 1, position));
     saveExam();
+    render();
+    revealQuestion();
+  }
+
+  function setReviewFilter(filter) {
+    reviewFilter = filter;
+    const visible = visiblePositions();
+    if (visible.length && !visible.includes(exam.current)) exam.current = visible[0];
     render();
   }
 
   function choose(letter) {
-    if (!ensureTimeLeft()) return;
+    if (examStatus() !== "active" || !ensureTimeLeft()) return;
     const question = examQuestion(exam.current);
     const required = question.correct.length;
     const picked = new Set(pickedAt(exam.current));
@@ -282,7 +404,7 @@
   }
 
   function tick() {
-    if (!exam || exam.status !== "active") {
+    if (examStatus() !== "active") {
       stopTimer();
       return;
     }
@@ -302,9 +424,12 @@
   function renderTimer() {
     const left = remainingSeconds();
     const text = formatDuration(left);
+    const paused = Boolean(exam.pausedAt);
     els.timer.textContent = text;
-    els.timer.classList.toggle("warning", left <= WARNING_SECONDS);
-    els.examModeBtn.textContent = mode === "practice" ? `Thi thử · ${text}` : "Thi thử";
+    els.timer.classList.toggle("warning", !paused && left <= WARNING_SECONDS);
+    els.timer.classList.toggle("paused", paused);
+    els.pausedRemaining.textContent = text;
+    els.examModeBtn.textContent = mode === "practice" ? `Thi thử · ${paused ? "tạm dừng" : text}` : "Thi thử";
   }
 
   function renderMode() {
@@ -319,9 +444,12 @@
   }
 
   function renderSidebar() {
+    const status = examStatus();
     els.grid.innerHTML = "";
+    els.reviewTabs.hidden = status !== "finished";
+    els.gridEmpty.hidden = true;
 
-    if (!exam) {
+    if (status === "idle") {
       const { cycle, seen, size } = ExamDeck.coverage(deck);
       const left = size - seen;
       els.sideLabel.textContent = `Độ phủ bộ đề · vòng ${cycle}`;
@@ -336,21 +464,7 @@
     }
 
     const total = exam.questionIds.length;
-    if (exam.status === "active") {
-      const answered = exam.questionIds.filter((_, position) => isAnswered(position)).length;
-      els.sideLabel.textContent = "Đã trả lời";
-      els.sideValue.textContent = `${answered}/${total}`;
-      els.progressFill.style.width = `${Math.round((answered / total) * 100)}%`;
-      setStats([
-        [exam.flagged.length, "đánh dấu"],
-        [total - answered, "chưa làm"],
-      ]);
-      setLegend([
-        ["answered", "Đã trả lời"],
-        ["flagged", "Đánh dấu"],
-        ["current", "Đang xem"],
-      ]);
-    } else {
+    if (status === "finished") {
       const score = scoreExam();
       els.sideLabel.textContent = "Điểm";
       els.sideValue.textContent = `${score.correct}/${score.total}`;
@@ -365,17 +479,41 @@
         ["wrong", "Sai"],
         ["skipped", "Bỏ trống"],
       ]);
+      const counts = { all: total, correct: score.correct, wrong: score.wrong, skipped: score.unanswered };
+      els.reviewButtons.forEach((button) => {
+        const filter = button.dataset.reviewFilter;
+        button.textContent = `${reviewLabels[filter]} · ${counts[filter]}`;
+        button.classList.toggle("active", filter === reviewFilter);
+      });
+    } else {
+      const answered = exam.questionIds.filter((_, position) => isAnswered(position)).length;
+      els.sideLabel.textContent = "Đã trả lời";
+      els.sideValue.textContent = `${answered}/${total}`;
+      els.progressFill.style.width = `${Math.round((answered / total) * 100)}%`;
+      setStats([
+        [exam.flagged.length, "đánh dấu"],
+        [total - answered, "chưa làm"],
+      ]);
+      if (status === "paused") {
+        setLegend([]);
+        return;
+      }
+      setLegend([
+        ["answered", "Đã trả lời"],
+        ["flagged", "Đánh dấu"],
+        ["current", "Đang xem"],
+      ]);
     }
 
-    exam.questionIds.forEach((_, position) => {
+    const visible = visiblePositions();
+    els.gridEmpty.hidden = visible.length > 0;
+    visible.forEach((position) => {
       const classes = [position === exam.current ? "current" : ""];
-      if (exam.status === "active") {
+      if (status === "active") {
         if (isAnswered(position)) classes.push("answered");
         if (exam.flagged.includes(position)) classes.push("flagged");
-      } else if (isRight(position)) {
-        classes.push("correct");
       } else {
-        classes.push(pickedAt(position).length ? "wrong" : "skipped");
+        classes.push(reviewStatus(position));
       }
 
       const button = document.createElement("button");
@@ -403,18 +541,35 @@
       const percent = (item.correct / item.total) * 100;
       const passed = percent >= PASS_PERCENT;
       const cells = [
-        new Date(item.startedAt).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" }),
+        dateFormat.format(new Date(item.startedAt)),
         `${item.correct}/${item.total} (${formatPercent(percent)})`,
         formatDuration(usedSeconds(item)) + (item.timedOut ? " (hết giờ)" : ""),
-        passed ? "Đạt" : "Chưa đạt",
       ];
       const row = document.createElement("tr");
-      cells.forEach((text, index) => {
+      cells.forEach((text) => {
         const cell = document.createElement("td");
         cell.textContent = text;
-        if (index === cells.length - 1) cell.className = passed ? "pass" : "fail";
         row.appendChild(cell);
       });
+
+      const verdict = document.createElement("td");
+      const badge = document.createElement("span");
+      badge.className = `verdict ${passed ? "pass" : "fail"}`;
+      badge.textContent = passed ? "Đạt" : "Chưa đạt";
+      verdict.appendChild(badge);
+      row.appendChild(verdict);
+
+      const action = document.createElement("td");
+      action.className = "history-action";
+      if (validQuestionIds(item.questionIds)) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "link-btn";
+        button.textContent = "Xem lại đáp án";
+        button.addEventListener("click", () => openHistory(item));
+        action.appendChild(button);
+      }
+      row.appendChild(action);
       els.historyBody.appendChild(row);
     });
   }
@@ -422,16 +577,21 @@
   function renderSummary() {
     const score = scoreExam();
     const passed = score.percent >= PASS_PERCENT;
+    const tone = passed ? "pass" : "fail";
+    els.scoreRing.className = `score-ring ${tone}`;
+    els.scoreRing.style.setProperty("--score", score.percent.toFixed(1));
     els.summaryPercent.textContent = formatPercent(score.percent);
     els.summaryVerdict.textContent = passed ? "Đạt" : "Chưa đạt";
-    els.summaryVerdict.className = `verdict ${passed ? "pass" : "fail"}`;
+    els.summaryVerdict.className = `verdict ${tone}`;
+    els.summaryDate.textContent = `Thi lúc ${dateFormat.format(new Date(exam.startedAt))}`;
     els.summaryCorrect.textContent = score.correct;
     els.summaryWrong.textContent = score.wrong;
     els.summaryUnanswered.textContent = score.unanswered;
     els.summaryTime.textContent = formatDuration(usedSeconds(exam));
     els.summaryNote.textContent =
       (exam.timedOut ? "Hết giờ, bài đã được tự động nộp. " : "") +
-      `Ngưỡng đạt ước tính ${PASS_PERCENT}% (tương đương 720/1000 điểm thang AWS). Chọn từng câu để xem lại đáp án.`;
+      `Ngưỡng đạt ước tính ${PASS_PERCENT}% (tương đương 720/1000 điểm thang AWS). ` +
+      "Chọn từng câu để xem lại đáp án, hoặc lọc riêng câu sai.";
   }
 
   function renderResult(question, picked) {
@@ -460,9 +620,9 @@
     const picked = pickedAt(position);
     const reviewing = exam.status === "finished";
     const flagged = exam.flagged.includes(position);
-    const isLast = position === total - 1;
+    const hasNext = neighbour(1) !== undefined;
 
-    els.eyebrow.textContent = reviewing ? "Kết quả đề thi thử" : "Đề thi thử ngẫu nhiên";
+    els.eyebrow.textContent = reviewing ? "Xem lại đáp án" : "Đề thi thử ngẫu nhiên";
     els.title.textContent = `Câu ${position + 1}/${total}`;
     els.modePill.textContent = required > 1 ? `Chọn ${required} đáp án` : "Một đáp án";
     els.numberPill.textContent = `Câu gốc #${question.number}`;
@@ -502,21 +662,26 @@
       els.resultBox.hidden = true;
     }
 
-    els.prevBtn.disabled = position === 0;
+    els.prevBtn.disabled = neighbour(-1) === undefined;
     els.flagBtn.hidden = reviewing;
     els.flagBtn.textContent = flagged ? "Bỏ đánh dấu" : "Đánh dấu xem lại";
     els.flagBtn.classList.toggle("active", flagged);
-    els.nextBtn.textContent = !reviewing && isLast ? "Nộp bài" : "Tiếp";
-    els.nextBtn.disabled = reviewing && isLast;
+    els.nextBtn.textContent = !reviewing && !hasNext ? "Nộp bài" : "Tiếp";
+    els.nextBtn.disabled = reviewing && !hasNext;
   }
 
   function renderMain() {
-    const status = exam ? exam.status : "idle";
+    const status = examStatus();
+    const running = status === "active" || status === "paused";
     els.start.hidden = status !== "idle";
     els.summary.hidden = status !== "finished";
-    els.questionPanel.hidden = status === "idle";
-    els.timer.hidden = status !== "active";
+    els.paused.hidden = status !== "paused";
+    els.questionPanel.hidden = status === "idle" || status === "paused";
+    els.timer.hidden = !running;
+    els.pauseBtn.hidden = !running;
+    els.pauseBtn.textContent = status === "paused" ? "Tiếp tục" : "Tạm dừng";
     els.submitBtn.hidden = status !== "active";
+    els.backBtn.hidden = status !== "finished";
     els.newExamBtn.hidden = status !== "finished";
 
     if (status === "idle") {
@@ -532,13 +697,12 @@
     renderSidebar();
     renderMain();
 
-    if (exam && exam.status === "active") {
-      renderTimer();
-      startTimer();
-    } else {
-      stopTimer();
-      els.examModeBtn.textContent = "Thi thử";
-    }
+    const status = examStatus();
+    if (status === "active" || status === "paused") renderTimer();
+    else els.examModeBtn.textContent = "Thi thử";
+
+    if (status === "active") startTimer();
+    else stopTimer();
   }
 
   els.modeButtons.forEach((button) => {
@@ -549,20 +713,33 @@
     });
   });
 
-  els.startBtn.addEventListener("click", startExam);
-  els.submitBtn.addEventListener("click", submitExam);
-  els.flagBtn.addEventListener("click", toggleFlag);
-  els.prevBtn.addEventListener("click", () => goTo(exam.current - 1));
-
-  els.nextBtn.addEventListener("click", () => {
-    if (exam.status === "active" && exam.current === exam.questionIds.length - 1) {
-      submitExam();
-      return;
-    }
-    goTo(exam.current + 1);
+  els.reviewButtons.forEach((button) => {
+    button.addEventListener("click", () => setReviewFilter(button.dataset.reviewFilter));
   });
 
-  els.newExamBtn.addEventListener("click", () => {
+  els.startBtn.addEventListener("click", startExam);
+  els.newExamBtn.addEventListener("click", startExam);
+  els.submitBtn.addEventListener("click", submitExam);
+  els.resumeBtn.addEventListener("click", resumeExam);
+  els.flagBtn.addEventListener("click", toggleFlag);
+
+  els.pauseBtn.addEventListener("click", () => {
+    if (examStatus() === "paused") resumeExam();
+    else pauseExam();
+  });
+
+  els.prevBtn.addEventListener("click", () => {
+    const target = neighbour(-1);
+    if (target !== undefined) goTo(target);
+  });
+
+  els.nextBtn.addEventListener("click", () => {
+    const target = neighbour(1);
+    if (target !== undefined) goTo(target);
+    else if (examStatus() === "active") submitExam();
+  });
+
+  els.backBtn.addEventListener("click", () => {
     exam = null;
     saveExam();
     render();
@@ -573,7 +750,7 @@
   els.passFact.textContent = `${PASS_PERCENT}%`;
   writeStorage(keys.deck, deck);
 
-  if (exam && exam.status === "active" && remainingSeconds() <= 0) {
+  if (examStatus() === "active" && remainingSeconds() <= 0) {
     finishExam(true);
   } else {
     render();
