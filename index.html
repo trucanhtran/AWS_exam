@@ -17,67 +17,170 @@
           </div>
         </div>
 
-        <div class="progress-card">
-          <div class="score-row">
-            <span>Tiến độ</span>
-            <strong id="progressText">0/0</strong>
-          </div>
-          <div class="progress-track" aria-hidden="true">
-            <div id="progressFill"></div>
-          </div>
-          <div class="mini-stats">
-            <span><b id="correctCount">0</b> đúng</span>
-            <span><b id="wrongCount">0</b> sai</span>
-          </div>
+        <div class="mode-switch" role="tablist" aria-label="Chế độ">
+          <button id="practiceModeBtn" data-mode="practice" role="tab" type="button">Luyện tập</button>
+          <button id="examModeBtn" data-mode="exam" role="tab" type="button">Thi thử</button>
         </div>
 
-        <label class="field">
-          <span>Tìm câu hỏi</span>
-          <input id="searchInput" type="search" placeholder="Nhập số câu hoặc từ khóa" />
-        </label>
+        <div data-view="practice">
+          <div class="progress-card">
+            <div class="score-row">
+              <span>Tiến độ</span>
+              <strong id="progressText">0/0</strong>
+            </div>
+            <div class="progress-track" aria-hidden="true">
+              <div id="progressFill"></div>
+            </div>
+            <div class="mini-stats">
+              <span><b id="correctCount">0</b> đúng</span>
+              <span><b id="wrongCount">0</b> sai</span>
+            </div>
+          </div>
 
-        <div class="filter-tabs" role="tablist" aria-label="Bộ lọc câu hỏi">
-          <button class="active" data-filter="all" type="button">Tất cả</button>
-          <button data-filter="unanswered" type="button">Chưa làm</button>
-          <button data-filter="wrong" type="button">Sai</button>
-          <button data-filter="correct" type="button">Đúng</button>
+          <label class="field">
+            <span>Tìm câu hỏi</span>
+            <input id="searchInput" type="search" placeholder="Nhập số câu hoặc từ khóa" />
+          </label>
+
+          <div class="filter-tabs" role="tablist" aria-label="Bộ lọc câu hỏi">
+            <button class="active" data-filter="all" type="button">Tất cả</button>
+            <button data-filter="unanswered" type="button">Chưa làm</button>
+            <button data-filter="wrong" type="button">Sai</button>
+            <button data-filter="correct" type="button">Đúng</button>
+          </div>
+
+          <div id="questionGrid" class="question-grid" aria-label="Chọn câu hỏi"></div>
         </div>
 
-        <div id="questionGrid" class="question-grid" aria-label="Chọn câu hỏi"></div>
+        <div data-view="exam" hidden>
+          <div class="progress-card">
+            <div class="score-row">
+              <span id="examSideLabel">Độ phủ bộ đề</span>
+              <strong id="examSideValue">0/0</strong>
+            </div>
+            <div class="progress-track" aria-hidden="true">
+              <div id="examProgressFill"></div>
+            </div>
+            <div id="examSideStats" class="mini-stats"></div>
+          </div>
+
+          <div id="examLegend" class="grid-legend"></div>
+          <div id="examGrid" class="question-grid" aria-label="Chọn câu trong đề"></div>
+        </div>
       </aside>
 
       <main class="main-panel">
-        <header class="topbar">
-          <div>
-            <p class="eyebrow">AWS Certified Solutions Architect Associate</p>
-            <h2 id="questionTitle">Question</h2>
-          </div>
-          <div class="top-actions">
-            <button id="resetBtn" class="ghost-btn" type="button">Làm lại</button>
-          </div>
-        </header>
+        <div data-view="practice">
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">AWS Certified Solutions Architect Associate</p>
+              <h2 id="questionTitle">Question</h2>
+            </div>
+            <div class="top-actions">
+              <button id="resetBtn" class="ghost-btn" type="button">Làm lại</button>
+            </div>
+          </header>
 
-        <section class="quiz-panel" aria-live="polite">
-          <div class="question-meta">
-            <span id="modePill">Một đáp án</span>
-            <span id="votePill">Answer votes</span>
-          </div>
+          <section class="quiz-panel" aria-live="polite">
+            <div class="question-meta">
+              <span id="modePill">Một đáp án</span>
+              <span id="votePill">Answer votes</span>
+            </div>
 
-          <p id="questionText" class="question-text"></p>
-          <div id="answers" class="answers"></div>
+            <p id="questionText" class="question-text"></p>
+            <div id="answers" class="answers"></div>
 
-          <div id="resultBox" class="result-box" hidden></div>
+            <div id="resultBox" class="result-box" hidden></div>
 
-          <div class="controls">
-            <button id="prevBtn" class="secondary-btn" type="button">Trước</button>
-            <button id="checkBtn" class="primary-btn" type="button" hidden>Chấm đáp án</button>
-            <button id="nextBtn" class="primary-btn" type="button">Tiếp</button>
-          </div>
-        </section>
+            <div class="controls">
+              <button id="prevBtn" class="secondary-btn" type="button">Trước</button>
+              <button id="checkBtn" class="primary-btn" type="button" hidden>Chấm đáp án</button>
+              <button id="nextBtn" class="primary-btn" type="button">Tiếp</button>
+            </div>
+          </section>
+        </div>
+
+        <div data-view="exam" hidden>
+          <header class="topbar">
+            <div>
+              <p id="examEyebrow" class="eyebrow">Thi thử ngẫu nhiên</p>
+              <h2 id="examTitle">Đề thi thử</h2>
+            </div>
+            <div class="top-actions">
+              <span id="examTimer" class="timer-pill" role="timer" hidden></span>
+              <button id="submitExamBtn" class="primary-btn" type="button" hidden>Nộp bài</button>
+              <button id="newExamBtn" class="primary-btn" type="button" hidden>Làm đề mới</button>
+            </div>
+          </header>
+
+          <section id="examStart" class="quiz-panel start-panel">
+            <div class="exam-facts">
+              <div><b id="examSizeFact">65</b><span>câu hỏi ngẫu nhiên</span></div>
+              <div><b id="examMinutesFact">130</b><span>phút làm bài</span></div>
+              <div><b id="examPassFact">72%</b><span>để đạt</span></div>
+            </div>
+            <p id="examRuleText" class="start-note"></p>
+            <p class="start-note">Trong lúc làm bài sẽ không hiện đáp án. Có thể đánh dấu câu để xem lại. Hết giờ hệ thống tự nộp bài.</p>
+            <div class="controls">
+              <button id="startExamBtn" class="primary-btn" type="button">Bắt đầu làm bài</button>
+            </div>
+
+            <div id="historyBlock" class="history" hidden>
+              <h3>Lịch sử thi</h3>
+              <div class="history-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Ngày thi</th>
+                      <th>Điểm</th>
+                      <th>Thời gian</th>
+                      <th>Kết quả</th>
+                    </tr>
+                  </thead>
+                  <tbody id="historyBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section id="examSummary" class="summary-card" hidden>
+            <div class="summary-score">
+              <b id="summaryPercent">0%</b>
+              <span id="summaryVerdict" class="verdict"></span>
+            </div>
+            <div class="summary-stats">
+              <span>Đúng <b id="summaryCorrect">0</b></span>
+              <span>Sai <b id="summaryWrong">0</b></span>
+              <span>Bỏ trống <b id="summaryUnanswered">0</b></span>
+              <span>Thời gian <b id="summaryTime">0:00</b></span>
+            </div>
+            <p id="summaryNote" class="summary-note"></p>
+          </section>
+
+          <section id="examQuestionPanel" class="quiz-panel" aria-live="polite" hidden>
+            <div class="question-meta">
+              <span id="examModePill">Một đáp án</span>
+              <span id="examNumberPill">Câu gốc</span>
+            </div>
+
+            <p id="examQuestionText" class="question-text"></p>
+            <div id="examAnswers" class="answers"></div>
+
+            <div id="examResultBox" class="result-box" hidden></div>
+
+            <div class="controls">
+              <button id="examPrevBtn" class="secondary-btn" type="button">Trước</button>
+              <button id="flagBtn" class="ghost-btn flag-btn" type="button">Đánh dấu xem lại</button>
+              <button id="examNextBtn" class="primary-btn" type="button">Tiếp</button>
+            </div>
+          </section>
+        </div>
       </main>
     </div>
 
     <script src="questions.js"></script>
     <script src="app.js"></script>
+    <script src="exam-deck.js"></script>
+    <script src="exam.js"></script>
   </body>
 </html>
