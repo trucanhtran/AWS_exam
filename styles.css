@@ -894,6 +894,7 @@ p {
 }
 
 .history-scroll {
+  position: relative;
   overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -933,6 +934,17 @@ p {
 
 .history-action {
   text-align: right !important;
+}
+
+.history-action .link-btn + .link-btn {
+  margin-left: 14px;
+}
+
+.history-sub {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .verdict {
@@ -1014,9 +1026,20 @@ p {
   gap: 8px 12px;
 }
 
-.summary-date {
+.summary-date,
+.summary-attempt {
   color: var(--muted);
   font-size: 0.88rem;
+}
+
+.summary-attempt.up {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.summary-attempt.down {
+  color: var(--red);
+  font-weight: 600;
 }
 
 .summary-stats {

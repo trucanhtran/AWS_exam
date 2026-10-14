@@ -34,6 +34,7 @@
     pauseBtn: document.getElementById("pauseBtn"),
     submitBtn: document.getElementById("submitExamBtn"),
     backBtn: document.getElementById("backBtn"),
+    retakeBtn: document.getElementById("retakeBtn"),
     newExamBtn: document.getElementById("newExamBtn"),
     start: document.getElementById("examStart"),
     sizeFact: document.getElementById("examSizeFact"),
@@ -48,6 +49,7 @@
     summaryPercent: document.getElementById("summaryPercent"),
     summaryVerdict: document.getElementById("summaryVerdict"),
     summaryDate: document.getElementById("summaryDate"),
+    summaryAttempt: document.getElementById("summaryAttempt"),
     summaryCorrect: document.getElementById("summaryCorrect"),
     summaryWrong: document.getElementById("summaryWrong"),
     summaryUnanswered: document.getElementById("summaryUnanswered"),
@@ -109,9 +111,12 @@
     );
   }
 
+  // Entries saved before retakes existed have no id or attempt count.
   function loadHistory() {
     const saved = readStorage(keys.history);
-    return Array.isArray(saved) ? saved.filter((item) => item && item.total > 0) : [];
+    return Array.isArray(saved)
+      ? saved.filter((item) => item && item.total > 0).map((item) => ({ id: item.startedAt, attempts: 1, ...item }))
+      : [];
   }
 
   function loadExam() {
@@ -264,6 +269,8 @@
     render();
   }
 
+  // A retake replaces the history entry of the exam it came from (moving it to
+  // the top), so history always holds each exam's latest answers.
   function finishExam(timedOut) {
     if (!exam || exam.status !== "active") return;
     if (exam.pausedAt) applyResume();
@@ -271,22 +278,25 @@
     exam.timedOut = timedOut;
     exam.finishedAt = Math.min(Date.now(), exam.endsAt);
     exam.current = 0;
+    exam.historyId = exam.historyId || exam.startedAt;
+    exam.attempt = exam.attempt || 1;
     reviewFilter = "all";
 
     const score = scoreExam();
-    history = [
-      {
-        startedAt: exam.startedAt,
-        finishedAt: exam.finishedAt,
-        pausedMs: exam.pausedMs,
-        timedOut,
-        correct: score.correct,
-        total: score.total,
-        questionIds: exam.questionIds,
-        answers: exam.answers,
-      },
-      ...history,
-    ].slice(0, HISTORY_LIMIT);
+    const entry = {
+      id: exam.historyId,
+      attempts: exam.attempt,
+      previous: exam.previous || null,
+      startedAt: exam.startedAt,
+      finishedAt: exam.finishedAt,
+      pausedMs: exam.pausedMs,
+      timedOut,
+      correct: score.correct,
+      total: score.total,
+      questionIds: exam.questionIds,
+      answers: exam.answers,
+    };
+    history = [entry, ...history.filter((item) => item.id !== entry.id)].slice(0, HISTORY_LIMIT);
     writeStorage(keys.history, history);
     saveExam();
     render();
@@ -306,11 +316,54 @@
       pausedAt: null,
       pausedMs: item.pausedMs || 0,
       timedOut: Boolean(item.timedOut),
+      historyId: item.id,
+      attempt: item.attempts,
+      previous: item.previous || null,
     };
     reviewFilter = "all";
     saveExam();
     render();
     window.scrollTo(0, 0);
+  }
+
+  // Starts the same questions again, in the same order, with a fresh clock.
+  // Retakes don't draw from the deck, so question coverage is unaffected.
+  function retakeExam(item) {
+    if (!validQuestionIds(item.questionIds)) return;
+    const now = Date.now();
+    exam = {
+      version: 1,
+      status: "active",
+      questionIds: item.questionIds.slice(),
+      answers: {},
+      flagged: [],
+      current: 0,
+      startedAt: now,
+      endsAt: now + EXAM_MINUTES * 60 * 1000,
+      finishedAt: null,
+      pausedAt: null,
+      pausedMs: 0,
+      timedOut: false,
+      historyId: item.id,
+      attempt: (item.attempts || 1) + 1,
+      previous: { correct: item.correct, total: item.total, finishedAt: item.finishedAt },
+    };
+    reviewFilter = "all";
+    saveExam();
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  function retakeCurrent() {
+    const score = scoreExam();
+    retakeExam({
+      id: exam.historyId || exam.startedAt,
+      attempts: exam.attempt || 1,
+      questionIds: exam.questionIds,
+      correct: score.correct,
+      total: score.total,
+      finishedAt: exam.finishedAt,
+    });
   }
 
   // Returns false (and submits) when time ran out while the page was idle.
@@ -551,6 +604,14 @@
         cell.textContent = text;
         row.appendChild(cell);
       });
+      if (item.attempts > 1) {
+        const note = document.createElement("small");
+        note.className = "history-sub";
+        note.textContent = item.previous
+          ? `Lần ${item.attempts} · trước ${item.previous.correct}/${item.previous.total}`
+          : `Lần ${item.attempts}`;
+        row.children[1].appendChild(note);
+      }
 
       const verdict = document.createElement("td");
       const badge = document.createElement("span");
@@ -562,12 +623,18 @@
       const action = document.createElement("td");
       action.className = "history-action";
       if (validQuestionIds(item.questionIds)) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "link-btn";
-        button.textContent = "Xem lại đáp án";
-        button.addEventListener("click", () => openHistory(item));
-        action.appendChild(button);
+        const review = document.createElement("button");
+        review.type = "button";
+        review.className = "link-btn";
+        review.textContent = "Xem lại";
+        review.addEventListener("click", () => openHistory(item));
+
+        const retake = document.createElement("button");
+        retake.type = "button";
+        retake.className = "link-btn";
+        retake.textContent = "Làm lại";
+        retake.addEventListener("click", () => retakeExam(item));
+        action.append(review, retake);
       }
       row.appendChild(action);
       els.historyBody.appendChild(row);
@@ -584,6 +651,16 @@
     els.summaryVerdict.textContent = passed ? "Đạt" : "Chưa đạt";
     els.summaryVerdict.className = `verdict ${tone}`;
     els.summaryDate.textContent = `Thi lúc ${dateFormat.format(new Date(exam.startedAt))}`;
+    const previous = exam.attempt > 1 ? exam.previous : null;
+    els.summaryAttempt.hidden = !(exam.attempt > 1);
+    if (exam.attempt > 1) {
+      const change = previous ? score.correct - previous.correct : 0;
+      const changeText = change > 0 ? `+${change}` : String(change);
+      els.summaryAttempt.textContent = previous
+        ? `Lần làm thứ ${exam.attempt} · lần trước ${previous.correct}/${previous.total} (${changeText} câu)`
+        : `Lần làm thứ ${exam.attempt}`;
+      els.summaryAttempt.className = `summary-attempt ${change > 0 ? "up" : change < 0 ? "down" : ""}`;
+    }
     els.summaryCorrect.textContent = score.correct;
     els.summaryWrong.textContent = score.wrong;
     els.summaryUnanswered.textContent = score.unanswered;
@@ -622,7 +699,8 @@
     const flagged = exam.flagged.includes(position);
     const hasNext = neighbour(1) !== undefined;
 
-    els.eyebrow.textContent = reviewing ? "Xem lại đáp án" : "Đề thi thử ngẫu nhiên";
+    const attemptLabel = exam.attempt > 1 ? ` · lần ${exam.attempt}` : "";
+    els.eyebrow.textContent = reviewing ? `Xem lại đáp án${attemptLabel}` : `Đề thi thử${attemptLabel || " ngẫu nhiên"}`;
     els.title.textContent = `Câu ${position + 1}/${total}`;
     els.modePill.textContent = required > 1 ? `Chọn ${required} đáp án` : "Một đáp án";
     els.numberPill.textContent = `Câu gốc #${question.number}`;
@@ -682,6 +760,7 @@
     els.pauseBtn.textContent = status === "paused" ? "Tiếp tục" : "Tạm dừng";
     els.submitBtn.hidden = status !== "active";
     els.backBtn.hidden = status !== "finished";
+    els.retakeBtn.hidden = status !== "finished";
     els.newExamBtn.hidden = status !== "finished";
 
     if (status === "idle") {
@@ -738,6 +817,8 @@
     if (target !== undefined) goTo(target);
     else if (examStatus() === "active") submitExam();
   });
+
+  els.retakeBtn.addEventListener("click", retakeCurrent);
 
   els.backBtn.addEventListener("click", () => {
     exam = null;

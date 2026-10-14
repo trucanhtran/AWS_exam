@@ -126,6 +126,7 @@
                 <button id="pauseBtn" class="ghost-btn" type="button" hidden>Tạm dừng</button>
                 <button id="submitExamBtn" class="primary-btn" type="button" hidden>Nộp bài</button>
                 <button id="backBtn" class="ghost-btn" type="button" hidden>Quay lại</button>
+                <button id="retakeBtn" class="ghost-btn" type="button" hidden>Làm lại đề này</button>
                 <button id="newExamBtn" class="primary-btn" type="button" hidden>Làm đề mới</button>
               </div>
             </header>
@@ -140,7 +141,8 @@
             <p id="examRuleText" class="start-note"></p>
             <p class="start-note">
               Trong lúc làm bài sẽ không hiện đáp án. Có thể đánh dấu câu để xem lại và tạm dừng khi cần. Hết giờ hệ
-              thống tự nộp bài. Mọi đề đã thi đều xem lại được đáp án trong phần lịch sử.
+              thống tự nộp bài. Mọi đề đã thi đều xem lại được đáp án và làm lại được trong phần lịch sử; làm lại
+              sẽ lưu đáp án của lần mới nhất.
             </p>
             <div class="controls">
               <button id="startExamBtn" class="primary-btn" type="button">Bắt đầu làm bài</button>
@@ -156,7 +158,7 @@
                       <th>Điểm</th>
                       <th>Thời gian</th>
                       <th>Kết quả</th>
-                      <th><span class="sr-only">Xem lại</span></th>
+                      <th><span class="sr-only">Thao tác</span></th>
                     </tr>
                   </thead>
                   <tbody id="historyBody"></tbody>
@@ -173,6 +175,7 @@
               <div class="summary-head">
                 <span id="summaryVerdict" class="verdict"></span>
                 <span id="summaryDate" class="summary-date"></span>
+                <span id="summaryAttempt" class="summary-attempt" hidden></span>
               </div>
               <div class="summary-stats">
                 <span class="stat good"><b id="summaryCorrect">0</b> đúng</span>
