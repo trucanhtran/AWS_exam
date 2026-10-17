@@ -373,6 +373,10 @@ p {
   margin-top: 0;
 }
 
+.review-tabs button[data-review-filter="all"] {
+  grid-column: 1 / -1;
+}
+
 /* Question grid */
 
 .question-grid {
@@ -1070,6 +1074,16 @@ p {
   color: var(--red);
 }
 
+.summary-stats .stat.flag b {
+  color: var(--amber);
+}
+
+.question-meta .flag-pill {
+  border-color: var(--amber-line);
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
 .summary-note {
   color: var(--muted);
   font-size: 0.88rem;
@@ -1224,11 +1238,26 @@ p {
     display: none;
   }
 
+  .sticky-bar .top-actions {
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    width: 100%;
+    gap: 8px;
+  }
+
   .top-actions .ghost-btn,
   .top-actions .primary-btn,
   .timer-pill {
+    justify-content: center;
     min-height: 38px;
-    padding: 0 12px;
+    padding: 0 6px;
+    font-size: 0.86rem;
+    white-space: nowrap;
+  }
+
+  .timer-pill {
+    font-size: 0.98rem;
   }
 
   .exam-facts {
