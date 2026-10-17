@@ -75,6 +75,7 @@
             <button data-review-filter="wrong" type="button">Sai</button>
             <button data-review-filter="skipped" type="button">Bỏ trống</button>
             <button data-review-filter="correct" type="button">Đúng</button>
+            <button data-review-filter="flagged" type="button">Đánh dấu</button>
           </div>
 
           <div id="examLegend" class="grid-legend"></div>
@@ -181,6 +182,7 @@
                 <span class="stat good"><b id="summaryCorrect">0</b> đúng</span>
                 <span class="stat bad"><b id="summaryWrong">0</b> sai</span>
                 <span class="stat"><b id="summaryUnanswered">0</b> bỏ trống</span>
+                <span class="stat flag"><b id="summaryFlagged">0</b> đánh dấu</span>
                 <span class="stat"><b id="summaryTime">0:00</b> làm bài</span>
               </div>
               <p id="summaryNote" class="summary-note"></p>
@@ -198,6 +200,7 @@
             <div class="question-meta">
               <span id="examModePill">Một đáp án</span>
               <span id="examNumberPill">Câu gốc</span>
+              <span id="examFlagPill" class="flag-pill" hidden>Đã đánh dấu</span>
             </div>
 
             <p id="examQuestionText" class="question-text"></p>

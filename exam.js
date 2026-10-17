@@ -12,7 +12,7 @@
     deck: "saa-c03-exam-deck",
     history: "saa-c03-exam-history",
   };
-  const reviewLabels = { all: "Tất cả", wrong: "Sai", skipped: "Bỏ trống", correct: "Đúng" };
+  const reviewLabels = { all: "Tất cả", wrong: "Sai", skipped: "Bỏ trống", correct: "Đúng", flagged: "Đánh dấu" };
 
   const els = {
     views: document.querySelectorAll("[data-view]"),
@@ -53,6 +53,7 @@
     summaryCorrect: document.getElementById("summaryCorrect"),
     summaryWrong: document.getElementById("summaryWrong"),
     summaryUnanswered: document.getElementById("summaryUnanswered"),
+    summaryFlagged: document.getElementById("summaryFlagged"),
     summaryTime: document.getElementById("summaryTime"),
     summaryNote: document.getElementById("summaryNote"),
     paused: document.getElementById("examPaused"),
@@ -61,6 +62,7 @@
     questionPanel: document.getElementById("examQuestionPanel"),
     modePill: document.getElementById("examModePill"),
     numberPill: document.getElementById("examNumberPill"),
+    flagPill: document.getElementById("examFlagPill"),
     questionText: document.getElementById("examQuestionText"),
     answers: document.getElementById("examAnswers"),
     resultBox: document.getElementById("examResultBox"),
@@ -295,6 +297,7 @@
       total: score.total,
       questionIds: exam.questionIds,
       answers: exam.answers,
+      flagged: exam.flagged,
     };
     history = [entry, ...history.filter((item) => item.id !== entry.id)].slice(0, HISTORY_LIMIT);
     writeStorage(keys.history, history);
@@ -308,7 +311,7 @@
       status: "finished",
       questionIds: item.questionIds,
       answers: item.answers || {},
-      flagged: [],
+      flagged: item.flagged || [],
       current: 0,
       startedAt: item.startedAt,
       endsAt: item.finishedAt,
@@ -357,7 +360,7 @@
   function retakeCurrent() {
     const score = scoreExam();
     retakeExam({
-      id: exam.historyId || exam.startedAt,
+      id: historyId(),
       attempts: exam.attempt || 1,
       questionIds: exam.questionIds,
       correct: score.correct,
@@ -390,6 +393,7 @@
   function visiblePositions() {
     const all = exam.questionIds.map((_, position) => position);
     if (exam.status !== "finished" || reviewFilter === "all") return all;
+    if (reviewFilter === "flagged") return all.filter((position) => exam.flagged.includes(position));
     return all.filter((position) => reviewStatus(position) === reviewFilter);
   }
 
@@ -447,13 +451,27 @@
     render();
   }
 
+  // Exams finished before history ids existed are keyed by their start time.
+  function historyId() {
+    return exam.historyId || exam.startedAt;
+  }
+
+  // Flags can still be changed while reviewing; the change is saved to history.
   function toggleFlag() {
+    if (examStatus() === "paused") return;
     const position = exam.current;
     exam.flagged = exam.flagged.includes(position)
       ? exam.flagged.filter((item) => item !== position)
-      : [...exam.flagged, position];
+      : [...exam.flagged, position].sort((a, b) => a - b);
+    if (exam.status === "finished") saveFlagsToHistory();
     saveExam();
     render();
+  }
+
+  function saveFlagsToHistory() {
+    const id = historyId();
+    history = history.map((item) => (item.id === id ? { ...item, flagged: exam.flagged } : item));
+    writeStorage(keys.history, history);
   }
 
   function tick() {
@@ -531,8 +549,15 @@
         ["correct", "Đúng"],
         ["wrong", "Sai"],
         ["skipped", "Bỏ trống"],
+        ["flagged", "Đánh dấu"],
       ]);
-      const counts = { all: total, correct: score.correct, wrong: score.wrong, skipped: score.unanswered };
+      const counts = {
+        all: total,
+        correct: score.correct,
+        wrong: score.wrong,
+        skipped: score.unanswered,
+        flagged: exam.flagged.length,
+      };
       els.reviewButtons.forEach((button) => {
         const filter = button.dataset.reviewFilter;
         button.textContent = `${reviewLabels[filter]} · ${counts[filter]}`;
@@ -564,10 +589,10 @@
       const classes = [position === exam.current ? "current" : ""];
       if (status === "active") {
         if (isAnswered(position)) classes.push("answered");
-        if (exam.flagged.includes(position)) classes.push("flagged");
       } else {
         classes.push(reviewStatus(position));
       }
+      if (exam.flagged.includes(position)) classes.push("flagged");
 
       const button = document.createElement("button");
       button.type = "button";
@@ -604,12 +629,16 @@
         cell.textContent = text;
         row.appendChild(cell);
       });
-      if (item.attempts > 1) {
+      const flaggedCount = Array.isArray(item.flagged) ? item.flagged.length : 0;
+      const notes = [
+        item.attempts > 1 ? `Lần ${item.attempts}` : "",
+        item.attempts > 1 && item.previous ? `trước ${item.previous.correct}/${item.previous.total}` : "",
+        flaggedCount ? `${flaggedCount} đánh dấu` : "",
+      ].filter(Boolean);
+      if (notes.length) {
         const note = document.createElement("small");
         note.className = "history-sub";
-        note.textContent = item.previous
-          ? `Lần ${item.attempts} · trước ${item.previous.correct}/${item.previous.total}`
-          : `Lần ${item.attempts}`;
+        note.textContent = notes.join(" · ");
         row.children[1].appendChild(note);
       }
 
@@ -664,11 +693,12 @@
     els.summaryCorrect.textContent = score.correct;
     els.summaryWrong.textContent = score.wrong;
     els.summaryUnanswered.textContent = score.unanswered;
+    els.summaryFlagged.textContent = exam.flagged.length;
     els.summaryTime.textContent = formatDuration(usedSeconds(exam));
     els.summaryNote.textContent =
       (exam.timedOut ? "Hết giờ, bài đã được tự động nộp. " : "") +
       `Ngưỡng đạt ước tính ${PASS_PERCENT}% (tương đương 720/1000 điểm thang AWS). ` +
-      "Chọn từng câu để xem lại đáp án, hoặc lọc riêng câu sai.";
+      "Chọn từng câu để xem lại đáp án, lọc riêng câu sai hoặc câu đã đánh dấu. Vẫn có thể đánh dấu thêm khi xem lại.";
   }
 
   function renderResult(question, picked) {
@@ -704,6 +734,7 @@
     els.title.textContent = `Câu ${position + 1}/${total}`;
     els.modePill.textContent = required > 1 ? `Chọn ${required} đáp án` : "Một đáp án";
     els.numberPill.textContent = `Câu gốc #${question.number}`;
+    els.flagPill.hidden = !flagged;
     els.questionText.textContent = question.text;
 
     els.answers.innerHTML = "";
@@ -741,7 +772,7 @@
     }
 
     els.prevBtn.disabled = neighbour(-1) === undefined;
-    els.flagBtn.hidden = reviewing;
+    els.flagBtn.hidden = false;
     els.flagBtn.textContent = flagged ? "Bỏ đánh dấu" : "Đánh dấu xem lại";
     els.flagBtn.classList.toggle("active", flagged);
     els.nextBtn.textContent = !reviewing && !hasNext ? "Nộp bài" : "Tiếp";
@@ -830,6 +861,13 @@
   els.minutesFact.textContent = EXAM_MINUTES;
   els.passFact.textContent = `${PASS_PERCENT}%`;
   writeStorage(keys.deck, deck);
+
+  // Exams finished before flags were kept in history still hold them in the
+  // saved exam state; copy them into the history entry once.
+  if (examStatus() === "finished" && exam.flagged.length) {
+    const entry = history.find((item) => item.id === historyId());
+    if (entry && !entry.flagged) saveFlagsToHistory();
+  }
 
   if (examStatus() === "active" && remainingSeconds() <= 0) {
     finishExam(true);
